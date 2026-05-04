@@ -6,15 +6,21 @@ const PROVIDERS = {
     url: 'https://api.mistral.ai/v1/chat/completions',
     key: process.env.MISTRAL_API_KEY,
     model: 'mistral-small-latest',
+    costPer1kInput: 0.0001,
+    costPer1kOutput: 0.0003,
   },
   groq: {
     url: 'https://api.groq.com/openai/v1/chat/completions',
     key: process.env.GROQ_API_KEY,
     model: 'llama-3.3-70b-versatile',
+    costPer1kInput: 0.00059,
+    costPer1kOutput: 0.00079,
   },
 };
 
 let currentProvider = PROVIDERS.mistral;
+let totalTokensUsed = 0;
+let totalCost = 0;
 
 function switchProvider(name) {
   const provider = PROVIDERS[name.toLowerCase()];
@@ -80,6 +86,8 @@ async function chatStream(userMessage) {
 
   history.push({ role: 'user', content: userMessage });
 
+  const start = Date.now();
+
   const response = await fetch(currentProvider.url, {
     method: 'POST',
     headers: {
@@ -97,12 +105,14 @@ async function chatStream(userMessage) {
   if (!response.ok) {
     history.pop();
     const err = await response.text();
-    throw new Error(`Mistral API error ${response.status}: ${err}`);
+    throw new Error(`API error ${response.status}: ${err}`);
   }
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let fullContent = '';
+  let promptTokens = 0;
+  let completionTokens = 0;
 
   process.stdout.write('IA : ');
 
@@ -124,13 +134,32 @@ async function chatStream(userMessage) {
           process.stdout.write(delta);
           fullContent += delta;
         }
+        if (parsed.usage) {
+          promptTokens = parsed.usage.prompt_tokens ?? 0;
+          completionTokens = parsed.usage.completion_tokens ?? 0;
+        }
       } catch {
         // chunk JSON invalide, on ignore
       }
     }
   }
 
-  process.stdout.write('\n\n');
+  const latency = Date.now() - start;
+  const tokens = promptTokens + completionTokens;
+  totalTokensUsed += tokens;
+
+  const cost = (promptTokens / 1000) * currentProvider.costPer1kInput
+             + (completionTokens / 1000) * currentProvider.costPer1kOutput;
+  totalCost += cost;
+
+  process.stdout.write('\n');
+
+  if (tokens > 0) {
+    console.log(`[${currentProvider.model} | ${latency}ms | ${tokens} tokens | coût total : $${totalCost.toFixed(6)}]\n`);
+  } else {
+    console.log(`[${currentProvider.model} | ${latency}ms]\n`);
+  }
+
   history.push({ role: 'assistant', content: fullContent });
 
   return fullContent;
@@ -168,6 +197,38 @@ async function resumeConversation() {
   console.log(data.choices[0].message.content + '\n');
 }
 
+async function translateLast(targetLanguage) {
+  const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant');
+  if (!lastAssistant) {
+    console.log("Aucun message de l'IA à traduire.\n");
+    return;
+  }
+
+  const response = await fetch(currentProvider.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${currentProvider.key}`,
+    },
+    body: JSON.stringify({
+      model: currentProvider.model,
+      messages: [
+        {
+          role: 'system',
+          content: `Tu es un traducteur expert. Traduis le texte suivant en ${targetLanguage}. Retourne uniquement la traduction, sans commentaire ni explication.`,
+        },
+        { role: 'user', content: lastAssistant.content },
+      ],
+      temperature: 0.1,
+    }),
+  });
+
+  const data = await response.json();
+  // Ne PAS modifier history — c'est une méta-commande
+  console.log('\nTraduction :');
+  console.log(data.choices[0].message.content + '\n');
+}
+
 function printHistory() {
   console.log('');
   for (const msg of history) {
@@ -186,8 +247,8 @@ function question(prompt) {
   return new Promise((resolve) => rl.question(prompt, resolve));
 }
 
-console.log('Chatbot CLI — Phase 6. (Ctrl+C pour quitter)');
-console.log('Commandes : /history | /provider <nom> | /resume\n');
+console.log('Chatbot CLI — Phase 7. (Ctrl+C pour quitter)');
+console.log('Commandes : /history | /provider <nom> | /resume | /translate <langue>\n');
 
 async function main() {
   while (true) {
@@ -202,6 +263,11 @@ async function main() {
 
     if (input === '/resume') {
       await resumeConversation();
+      continue;
+    }
+
+    if (input.startsWith('/translate ')) {
+      await translateLast(input.slice(11).trim());
       continue;
     }
 
