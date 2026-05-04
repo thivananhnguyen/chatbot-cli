@@ -5,7 +5,8 @@
   "main": "index.js",
   "scripts": {
     "cli": "node chatbot-cli.js",
-    "api": "node api.js"
+    "api": "node api.js",
+    "summarize": "node summarize.js"
   },
   "keywords": [],
   "author": "",

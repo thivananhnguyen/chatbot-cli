@@ -1,6 +1,6 @@
 # Chatbot CLI multi-provider
 
-Chatbot en ligne de commande avec mémoire conversationnelle, streaming, compression automatique du contexte et une mini API HTTP.
+Chatbot en ligne de commande avec mémoire conversationnelle, streaming, compression automatique du contexte, une mini API HTTP et un script de résumé de documents.
 
 ## Fonctionnalités
 
@@ -11,6 +11,7 @@ Chatbot en ligne de commande avec mémoire conversationnelle, streaming, compres
 - Commandes spéciales : `/history`, `/resume`, `/translate`, `/provider`
 - Métriques par requête : latence, tokens, coût estimé
 - Mini API Express : `GET /chat` et `DELETE /history`
+- Résumé automatique de fichiers texte en 5 bullet points (`summarize.js`)
 
 ## Structure
 
@@ -18,6 +19,8 @@ Chatbot en ligne de commande avec mémoire conversationnelle, streaming, compres
 chatbot-cli/
 ├── chatbot-cli.js   # Chatbot CLI interactif (phases 1–7)
 ├── api.js           # Mini API Express HTTP (phase 8)
+├── summarize.js     # Script de résumé de document texte
+├── cours.txt        # Fichier texte à résumer (non versionné)
 ├── providers.js     # Configuration des providers (source unique)
 ├── .env             # Clés API (non versionné)
 ├── .env.example     # Template des variables d'environnement
@@ -118,4 +121,46 @@ Invoke-RestMethod "http://localhost:3000/chat?q=Qui es-tu&provider=groq"
 # Réinitialiser l'historique
 Invoke-RestMethod -Method DELETE "http://localhost:3000/history"
 ```
+
+## Résumé de document
+
+`summarize.js` est un script autonome qui résume n'importe quel texte (cours, article, documentation) en **5 bullet points actionnables** via l'API Mistral ou Groq.
+
+### Utilisation
+
+1. Créez un fichier `cours.txt` dans le dossier du projet et collez-y le contenu à résumer
+2. Lancez le script :
+
+```powershell
+# Avec Mistral (défaut)
+npm run summarize
+
+# Avec Groq
+npm run summarize -- groq
+```
+
+### Exemple de sortie
+
+```
+Lecture du fichier cours.txt...
+Résumé via mistral-small-latest...
+
+────────────────────────────────────────────────────────────
+- Identifier les trois conditions cumulatives de validité d'un contrat : consentement, capacité et contenu licite (art. 1128 C. civ.).
+- Distinguer les trois vices du consentement : erreur sur les qualités essentielles, dol par manœuvres frauduleuses, violence physique ou morale.
+- Retenir le principe de force obligatoire (art. 1103) et son exception : la théorie de l'imprévision introduite par la réforme de 2016.
+- Appliquer l'effet relatif des contrats : seules les parties sont liées, sauf stipulation pour autrui.
+- Connaître les remèdes à l'inexécution : résolution, exécution forcée en nature, dommages-intérêts — après mise en demeure.
+────────────────────────────────────────────────────────────
+[ mistral-small-latest | 1842ms | 748 tokens | coût : $0.000149 ]
+```
+
+### Paramètres configurables dans `summarize.js`
+
+| Paramètre | Valeur par défaut | Description |
+|---|---|---|
+| `providerName` | `mistral` | Provider via argument CLI |
+| `temperature` | `0.3` | Faible pour rester factuel |
+| `slice(0, 12000)` | 12 000 chars | Limite de sécurité anti-spam tokens |
+| Prompt | 5 bullet points | Verbe à l'infinitif, 1–2 lignes max |
 
