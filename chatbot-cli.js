@@ -34,7 +34,50 @@ const history = [
   },
 ];
 
+const MAX_HISTORY = 4;
+
+async function compressHistory() {
+  const messageCount = history.length - 1;
+  const conversation = history
+    .slice(1)
+    .map((m) => `${m.role}: ${m.content}`)
+    .join('\n');
+
+  const response = await fetch(currentProvider.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${currentProvider.key}`,
+    },
+    body: JSON.stringify({
+      model: currentProvider.model,
+      messages: [
+        {
+          role: 'system',
+          content: 'Résume cette conversation en 3 à 5 phrases concises. Conserve uniquement les faits importants.',
+        },
+        { role: 'user', content: conversation },
+      ],
+      temperature: 0.3,
+    }),
+  });
+
+  const data = await response.json();
+  const summary = data.choices[0].message.content;
+
+  history.splice(1, history.length - 1, {
+    role: 'system',
+    content: `Résumé de la conversation précédente : ${summary}`,
+  });
+
+  console.log(`\n💡 Contexte compressé (${messageCount} messages → 1 résumé)\n`);
+}
+
 async function chatStream(userMessage) {
+  if (history.length > MAX_HISTORY) {
+    await compressHistory();
+  }
+
   history.push({ role: 'user', content: userMessage });
 
   const response = await fetch(currentProvider.url, {
@@ -111,7 +154,7 @@ function question(prompt) {
   return new Promise((resolve) => rl.question(prompt, resolve));
 }
 
-console.log('Chatbot CLI — Phase 4. (Ctrl+C pour quitter)');
+console.log('Chatbot CLI — Phase 5. (Ctrl+C pour quitter)');
 console.log('Commandes : /history | /provider <nom>\n');
 
 async function main() {
