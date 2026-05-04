@@ -1,22 +1,6 @@
 import 'dotenv/config';
 import readline from 'node:readline';
-
-const PROVIDERS = {
-  mistral: {
-    url: 'https://api.mistral.ai/v1/chat/completions',
-    key: process.env.MISTRAL_API_KEY,
-    model: 'mistral-small-latest',
-    costPer1kInput: 0.0001,
-    costPer1kOutput: 0.0003,
-  },
-  groq: {
-    url: 'https://api.groq.com/openai/v1/chat/completions',
-    key: process.env.GROQ_API_KEY,
-    model: 'llama-3.3-70b-versatile',
-    costPer1kInput: 0.00059,
-    costPer1kOutput: 0.00079,
-  },
-};
+import { PROVIDERS } from './providers.js';
 
 let currentProvider = PROVIDERS.mistral;
 let totalTokensUsed = 0;
@@ -41,7 +25,7 @@ const history = [
   },
 ];
 
-const MAX_HISTORY = 20;
+const MAX_HISTORY = 2;
 
 // ─── Phase 5 : Compression automatique ─────────
 async function compressHistory() {
@@ -261,25 +245,29 @@ function question(prompt) {
   return new Promise((resolve) => rl.question(prompt, resolve));
 }
 
-while (true) {
-  const input = (await question('Vous : ')).trim();
+async function main() {
+  while (true) {
+    const input = (await question('Vous : ')).trim();
 
-  if (!input) continue;
+    if (!input) continue;
 
-  if (input === '/history') {
-    printHistory();
-  } else if (input === '/resume') {
-    await resumeConversation();
-  } else if (input.startsWith('/translate ')) {
-    await translateLast(input.slice(11).trim());
-  } else if (input.startsWith('/provider ')) {
-    switchProvider(input.slice(10).trim());
-  } else {
-    try {
-      await chatStream(input);
-    } catch (err) {
-      console.error(`Erreur : ${err.message}\n`);
+    if (input === '/history') {
+      printHistory();
+    } else if (input === '/resume') {
+      await resumeConversation();
+    } else if (input.startsWith('/translate ')) {
+      await translateLast(input.slice(11).trim());
+    } else if (input.startsWith('/provider ')) {
+      switchProvider(input.slice(10).trim());
+    } else {
+      try {
+        await chatStream(input);
+      } catch (err) {
+        console.error(`Erreur : ${err.message}\n`);
+      }
     }
   }
 }
+
+main();
 
