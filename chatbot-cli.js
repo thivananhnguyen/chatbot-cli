@@ -34,7 +34,7 @@ const history = [
   },
 ];
 
-const MAX_HISTORY = 4;
+const MAX_HISTORY = 20;
 
 async function compressHistory() {
   const messageCount = history.length - 1;
@@ -136,6 +136,38 @@ async function chatStream(userMessage) {
   return fullContent;
 }
 
+async function resumeConversation() {
+  if (history.length <= 1) {
+    console.log('Aucune conversation à résumer.\n');
+    return;
+  }
+
+  const conversation = history.slice(1).map((m) => `${m.role}: ${m.content}`).join('\n');
+
+  const response = await fetch(currentProvider.url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${currentProvider.key}`,
+    },
+    body: JSON.stringify({
+      model: currentProvider.model,
+      messages: [
+        {
+          role: 'system',
+          content: "Résume cette conversation en bullet points (5 max). Chaque bullet commence par un verbe à l'infinitif.",
+        },
+        { role: 'user', content: conversation },
+      ],
+      temperature: 0.3,
+    }),
+  });
+
+  const data = await response.json();
+  console.log('\nRésumé :');
+  console.log(data.choices[0].message.content + '\n');
+}
+
 function printHistory() {
   console.log('');
   for (const msg of history) {
@@ -154,8 +186,8 @@ function question(prompt) {
   return new Promise((resolve) => rl.question(prompt, resolve));
 }
 
-console.log('Chatbot CLI — Phase 5. (Ctrl+C pour quitter)');
-console.log('Commandes : /history | /provider <nom>\n');
+console.log('Chatbot CLI — Phase 6. (Ctrl+C pour quitter)');
+console.log('Commandes : /history | /provider <nom> | /resume\n');
 
 async function main() {
   while (true) {
@@ -165,6 +197,11 @@ async function main() {
 
     if (input === '/history') {
       printHistory();
+      continue;
+    }
+
+    if (input === '/resume') {
+      await resumeConversation();
       continue;
     }
 
