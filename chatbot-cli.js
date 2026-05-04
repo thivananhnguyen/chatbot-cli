@@ -12,7 +12,7 @@ const history = [
   },
 ];
 
-async function chat(userMessage) {
+async function chatStream(userMessage) {
   history.push({ role: 'user', content: userMessage });
 
   const response = await fetch(MISTRAL_URL, {
@@ -25,6 +25,7 @@ async function chat(userMessage) {
       model: MISTRAL_MODEL,
       messages: history,
       temperature: 0.7,
+      stream: true,
     }),
   });
 
@@ -34,12 +35,40 @@ async function chat(userMessage) {
     throw new Error(`Mistral API error ${response.status}: ${err}`);
   }
 
-  const data = await response.json();
-  const assistantMessage = data.choices[0].message.content;
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let fullContent = '';
 
-  history.push({ role: 'assistant', content: assistantMessage });
+  process.stdout.write('IA : ');
 
-  return assistantMessage;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value);
+    const lines = chunk.split('\n').filter((line) => line.startsWith('data: '));
+
+    for (const line of lines) {
+      const jsonStr = line.slice(6);
+      if (jsonStr.trim() === '[DONE]') continue;
+
+      try {
+        const parsed = JSON.parse(jsonStr);
+        const delta = parsed.choices[0]?.delta?.content;
+        if (delta) {
+          process.stdout.write(delta);
+          fullContent += delta;
+        }
+      } catch {
+        // chunk JSON invalide, on ignore
+      }
+    }
+  }
+
+  process.stdout.write('\n\n');
+  history.push({ role: 'assistant', content: fullContent });
+
+  return fullContent;
 }
 
 function printHistory() {
@@ -60,7 +89,7 @@ function question(prompt) {
   return new Promise((resolve) => rl.question(prompt, resolve));
 }
 
-console.log('Chatbot CLI — Phase 2. (Ctrl+C pour quitter)');
+console.log('Chatbot CLI — Phase 3. (Ctrl+C pour quitter)');
 console.log('Commandes : /history\n');
 
 async function main() {
@@ -75,8 +104,7 @@ async function main() {
     }
 
     try {
-      const reply = await chat(input);
-      console.log(`IA : ${reply}\n`);
+      await chatStream(input);
     } catch (err) {
       console.error(`Erreur : ${err.message}\n`);
     }
