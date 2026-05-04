@@ -9,7 +9,6 @@ const sessionHistory = [
   },
 ];
 
-// ─── Appel API sans streaming ───
 async function chat(userMessage, provider) {
   sessionHistory.push({ role: 'user', content: userMessage });
 
@@ -27,9 +26,9 @@ async function chat(userMessage, provider) {
   });
 
   if (!response.ok) {
-    sessionHistory.pop();
-    const err = await response.text();
-    throw new Error(`API error ${response.status}: ${err}`);
+    // Lancer un objet structuré — la route se chargera du pop()
+    const err = await response.json().catch(() => ({}));
+    throw { status: 502, message: 'Erreur API provider', detail: err };
   }
 
   const data = await response.json();
@@ -45,16 +44,17 @@ async function chat(userMessage, provider) {
 const app = express();
 app.use(express.json());
 
-// GET /chat?q=<message>&provider=<nom>
+// ─── GET /chat ────────
 app.get('/chat', async (req, res) => {
-  const q = req.query.q?.trim();
-  const providerName = (req.query.provider ?? 'mistral').toLowerCase();
+  const { q, provider: providerName = 'mistral' } = req.query;
 
-  if (!q) {
-    return res.status(400).json({ error: 'Paramètre "q" manquant.' });
+  // Validation & Sanitisation
+  if (!q || typeof q !== 'string' || q.trim() === '') {
+    return res.status(400).json({ error: 'Paramètre q manquant ou vide.' });
   }
+  const userMessage = q.trim().slice(0, 4000); // limite 4000 chars
 
-  const provider = PROVIDERS[providerName];
+  const provider = PROVIDERS[providerName.toLowerCase()];
   if (!provider) {
     return res.status(400).json({
       error: `Provider inconnu : "${providerName}". Disponibles : ${Object.keys(PROVIDERS).join(', ')}`,
@@ -62,23 +62,26 @@ app.get('/chat', async (req, res) => {
   }
 
   try {
-    const { reply, tokens } = await chat(q, provider);
-    res.json({ reply, provider: providerName, tokens });
+    const { reply, tokens } = await chat(userMessage, provider);
+    res.json({ reply, provider: providerName.toLowerCase(), tokens });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    sessionHistory.pop(); // annuler le push user (erreur 502 ou réseau)
+    const statusCode = err.status || 500;
+    const errorMessage = err.message || 'Erreur interne du serveur.';
+    res.status(statusCode).json({ error: errorMessage, detail: err.detail });
   }
 });
 
-// DELETE /history
+// ─── DELETE /history ─────
 app.delete('/history', (req, res) => {
   sessionHistory.splice(1); // vider tout sauf le system prompt
-  res.json({ message: 'Historique réinitialisé.' });
+  res.json({ message: 'Historique réinitialisé.', remaining: sessionHistory.length });
 });
 
-// ─── Démarrage ──────
+// ─── Démarrage du serveur ───────────
 const PORT = process.env.PORT ?? 3000;
 app.listen(PORT, () => {
-  console.log(`Chatbot API — http://localhost:${PORT}`);
-  console.log('  GET  /chat?q=<message>&provider=<nom>');
+  console.log(`Chatbot API démarrée sur http://localhost:${PORT}`);
+  console.log('  GET    /chat?q=<message>&provider=<nom>');
   console.log('  DELETE /history');
 });
