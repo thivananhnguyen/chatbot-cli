@@ -1,9 +1,31 @@
 import 'dotenv/config';
 import readline from 'node:readline';
 
-const MISTRAL_API_KEY = process.env.MISTRAL_API_KEY;
-const MISTRAL_URL = 'https://api.mistral.ai/v1/chat/completions';
-const MISTRAL_MODEL = 'mistral-small-latest';
+const PROVIDERS = {
+  mistral: {
+    url: 'https://api.mistral.ai/v1/chat/completions',
+    key: process.env.MISTRAL_API_KEY,
+    model: 'mistral-small-latest',
+  },
+  groq: {
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    key: process.env.GROQ_API_KEY,
+    model: 'llama-3.3-70b-versatile',
+  },
+};
+
+let currentProvider = PROVIDERS.mistral;
+
+function switchProvider(name) {
+  const provider = PROVIDERS[name.toLowerCase()];
+  if (!provider) {
+    console.log(`Provider inconnu : "${name}". Disponibles : ${Object.keys(PROVIDERS).join(', ')}\n`);
+    return false;
+  }
+  currentProvider = provider;
+  console.log(`Provider changé : ${name} (${provider.model})\n`);
+  return true;
+}
 
 const history = [
   {
@@ -15,14 +37,14 @@ const history = [
 async function chatStream(userMessage) {
   history.push({ role: 'user', content: userMessage });
 
-  const response = await fetch(MISTRAL_URL, {
+  const response = await fetch(currentProvider.url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${MISTRAL_API_KEY}`,
+      Authorization: `Bearer ${currentProvider.key}`,
     },
     body: JSON.stringify({
-      model: MISTRAL_MODEL,
+      model: currentProvider.model,
       messages: history,
       temperature: 0.7,
       stream: true,
@@ -89,8 +111,8 @@ function question(prompt) {
   return new Promise((resolve) => rl.question(prompt, resolve));
 }
 
-console.log('Chatbot CLI — Phase 3. (Ctrl+C pour quitter)');
-console.log('Commandes : /history\n');
+console.log('Chatbot CLI — Phase 4. (Ctrl+C pour quitter)');
+console.log('Commandes : /history | /provider <nom>\n');
 
 async function main() {
   while (true) {
@@ -100,6 +122,11 @@ async function main() {
 
     if (input === '/history') {
       printHistory();
+      continue;
+    }
+
+    if (input.startsWith('/provider ')) {
+      switchProvider(input.slice(10).trim());
       continue;
     }
 
