@@ -22,6 +22,7 @@ let currentProvider = PROVIDERS.mistral;
 let totalTokensUsed = 0;
 let totalCost = 0;
 
+// ─── Phase 4 : Sélection de provider ──────
 function switchProvider(name) {
   const provider = PROVIDERS[name.toLowerCase()];
   if (!provider) {
@@ -42,6 +43,7 @@ const history = [
 
 const MAX_HISTORY = 20;
 
+// ─── Phase 5 : Compression automatique ─────────
 async function compressHistory() {
   const messageCount = history.length - 1;
   const conversation = history
@@ -79,6 +81,7 @@ async function compressHistory() {
   console.log(`\n💡 Contexte compressé (${messageCount} messages → 1 résumé)\n`);
 }
 
+// ─── Phase 3 : Streaming + métriques ──────────
 async function chatStream(userMessage) {
   if (history.length > MAX_HISTORY) {
     await compressHistory();
@@ -165,6 +168,7 @@ async function chatStream(userMessage) {
   return fullContent;
 }
 
+// ─── Phase 6 : /resume ─────────
 async function resumeConversation() {
   if (history.length <= 1) {
     console.log('Aucune conversation à résumer.\n');
@@ -197,6 +201,7 @@ async function resumeConversation() {
   console.log(data.choices[0].message.content + '\n');
 }
 
+// ─── Phase 7 : /translate ─────
 async function translateLast(targetLanguage) {
   const lastAssistant = [...history].reverse().find((m) => m.role === 'assistant');
   if (!lastAssistant) {
@@ -229,53 +234,47 @@ async function translateLast(targetLanguage) {
   console.log(data.choices[0].message.content + '\n');
 }
 
+// ─── Phase 2 : Afficher l'historique ─────────────────────────────
 function printHistory() {
-  console.log('');
-  for (const msg of history) {
-    const preview = msg.content.replace(/\n/g, ' ').slice(0, 80);
-    console.log(`[${msg.role.padEnd(9)}] ${preview}`);
-  }
-  console.log('');
+  console.log('\n─── Historique ──────────────────────────────────────');
+  history.forEach((m, i) => {
+    const preview = m.content.length > 100 ? m.content.slice(0, 100) + '…' : m.content;
+    console.log(`[${i}] ${m.role.padEnd(9)} : ${preview.replace(/\n/g, ' ')}`);
+  });
+  console.log(`─── ${history.length} message(s) ─────────────────────────────────\n`);
 }
 
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
+// ─── Boucle principale ──────────────────────────────────────────────
+console.log('╔══════════════════════════════════════════════════╗');
+console.log('║      Chatbot CLI — multi-provider + mémoire      ║');
+console.log('╚══════════════════════════════════════════════════╝');
+console.log('Providers disponibles :', Object.keys(PROVIDERS).join(', '));
+console.log('Commandes :');
+console.log('  /history            — afficher les messages en mémoire');
+console.log('  /provider <nom>     — changer de provider');
+console.log('  /resume             — résumé bullet points de la conversation');
+console.log('  /translate <langue> — traduire la dernière réponse IA');
+console.log('(Ctrl+C pour quitter)\n');
 
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 function question(prompt) {
   return new Promise((resolve) => rl.question(prompt, resolve));
 }
 
-console.log('Chatbot CLI — Phase 7. (Ctrl+C pour quitter)');
-console.log('Commandes : /history | /provider <nom> | /resume | /translate <langue>\n');
+while (true) {
+  const input = (await question('Vous : ')).trim();
 
-async function main() {
-  while (true) {
-    const input = (await question('Vous : ')).trim();
+  if (!input) continue;
 
-    if (!input) continue;
-
-    if (input === '/history') {
-      printHistory();
-      continue;
-    }
-
-    if (input === '/resume') {
-      await resumeConversation();
-      continue;
-    }
-
-    if (input.startsWith('/translate ')) {
-      await translateLast(input.slice(11).trim());
-      continue;
-    }
-
-    if (input.startsWith('/provider ')) {
-      switchProvider(input.slice(10).trim());
-      continue;
-    }
-
+  if (input === '/history') {
+    printHistory();
+  } else if (input === '/resume') {
+    await resumeConversation();
+  } else if (input.startsWith('/translate ')) {
+    await translateLast(input.slice(11).trim());
+  } else if (input.startsWith('/provider ')) {
+    switchProvider(input.slice(10).trim());
+  } else {
     try {
       await chatStream(input);
     } catch (err) {
@@ -283,6 +282,4 @@ async function main() {
     }
   }
 }
-
-main();
 
